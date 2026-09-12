@@ -1,3 +1,5 @@
+<img width="1672" height="941" alt="37812634-905d-498b-87e0-99deb53be189" src="https://github.com/user-attachments/assets/5a6c9e5a-f8a9-44a0-b0f9-f3d6cf0abafb" />
+
 # VirusTotal Scanner Pro — C++ / Dear ImGui + DirectX 11
 
 Портирован с оригинального Python/customtkinter-приложения (`virustotal.py`) на нативный
