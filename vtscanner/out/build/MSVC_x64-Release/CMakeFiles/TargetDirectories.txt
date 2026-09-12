@@ -1,0 +1,3 @@
+D:/source/repos/vtscanner/out/build/MSVC_x64-Release/CMakeFiles/VirusTotalScannerPro.dir
+D:/source/repos/vtscanner/out/build/MSVC_x64-Release/CMakeFiles/edit_cache.dir
+D:/source/repos/vtscanner/out/build/MSVC_x64-Release/CMakeFiles/rebuild_cache.dir

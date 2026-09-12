@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=VirusTotal Scanner Pro
+GenericName=File scanner
+Comment=Проверка файлов через VirusTotal API
+Comment[en]=Scan files via the VirusTotal API
+Exec=/usr/local/bin/vt_scanner_linux
+Icon=vtscanner
+Terminal=false
+Categories=Utility;Security;
+StartupWMClass=VTScannerWndClass
+Version=1.0

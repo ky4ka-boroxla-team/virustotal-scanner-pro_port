@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/source/repos/vtscanner/out/build/MSVC_x64-Release/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

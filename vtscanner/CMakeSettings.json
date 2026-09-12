@@ -1,0 +1,51 @@
+﻿{
+  "configurations": [
+    {
+      "name": "x64-Debug",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "intelliSenseMode": "windows-msvc-x64"
+    },
+    {
+      "name": "MSVC_x64-Release",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "intelliSenseMode": "windows-msvc-x64"
+    },
+    {
+      "name": "arm64-Release",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "inheritEnvironments": [ "msvc_arm64_x64" ],
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "intelliSenseMode": "windows-msvc-arm64"
+    },
+    {
+      "name": "Zig_x64-Release",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "-DCMAKE_C_COMPILER=C:/zig_compiler/zig.exe -DCMAKE_C_COMPILER_ARG1=cc -DCMAKE_CXX_COMPILER=C:/zig_compiler/zig.exe -DCMAKE_CXX_COMPILER_ARG1=c++ -DCMAKE_RC_COMPILER=C:/zig_compiler/zig.exe -DCMAKE_RC_COMPILER_ARG1=rc -DCMAKE_CXX_FLAGS=\"-target x86_64-windows-msvc\" -DCMAKE_C_FLAGS=\"-target x86_64-windows-msvc\" -DCMAKE_EXE_LINKER_FLAGS=\"-Xlinker /MANIFEST:NO\" -DCMAKE_POLICY_DEFAULT_CMP0141=NEW",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "intelliSenseMode": "windows-clang-x64"
+    }
+  ]
+}
