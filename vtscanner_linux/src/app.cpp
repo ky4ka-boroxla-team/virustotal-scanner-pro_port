@@ -58,6 +58,11 @@ void App::Init(void* hwnd) {
         s.requestsUsed = m_config.requestsUsed;
     });
     if (m_config.apiKey.empty()) m_showApiKeyPopup = true;
+    if (!m_config.thanksShown) m_showThanks = true;
+
+    // Keep the autostart entry in sync with the saved setting on every launch (covers
+    // the binary being moved/reinstalled, or the entry being removed by hand).
+    SetAutostart(m_config.autostart);
 }
 
 ScanState App::Snapshot() {
@@ -94,6 +99,7 @@ void App::DrawUI() {
     if (m_showSettings) DrawSettingsPopup();
     if (m_showApiKeyPopup) DrawApiKeyPopup();
     if (m_showAbout) DrawAboutPopup();
+    if (m_showThanks) DrawThanksPopup();
     if (m_showFileBrowser) DrawFileBrowserPopup();
 }
 
@@ -168,7 +174,7 @@ void App::DrawMainWindow() {
 
 void App::DrawSettingsPopup() {
     ImGui::OpenPopup(T(L(), "settings").c_str());
-    ImGui::SetNextWindowSize(ImVec2(420, 380), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(420, 440), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal(T(L(), "settings").c_str(), &m_showSettings)) {
         ImGui::Checkbox(T(L(), "topmost").c_str(), &m_config.topmost);
         ImGui::Spacing();
@@ -193,7 +199,13 @@ void App::DrawSettingsPopup() {
         if (ImGui::RadioButton(T(L(), "lang_en").c_str(), !isRu)) m_config.lang = "en";
         ImGui::Spacing();
         ImGui::Separator();
+        ImGui::Text("%s", T(L(), "behavior").c_str());
+        ImGui::Checkbox(T(L(), "close_to_tray").c_str(), &m_config.closeToTray);
+        ImGui::Checkbox(T(L(), "autostart").c_str(), &m_config.autostart);
+        ImGui::Spacing();
+        ImGui::Separator();
         if (ImGui::Button(T(L(), "save").c_str(), ImVec2(120, 32))) {
+            SetAutostart(m_config.autostart);
             SaveConfig(m_config);
             MutateState([&](ScanState& s) { s.statusText = T(L(), "ready"); });
             m_showSettings = false;
@@ -244,6 +256,45 @@ void App::DrawAboutPopup() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
+    }
+}
+
+void App::DrawThanksPopup() {
+    ImGui::OpenPopup(T(L(), "thanks_title").c_str());
+    ImGui::SetNextWindowSize(ImVec2(440, 220), ImGuiCond_Appearing);
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+                                    viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
+                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    bool wasOpen = m_showThanks;
+    if (ImGui::BeginPopupModal(T(L(), "thanks_title").c_str(), &m_showThanks,
+                                ImGuiWindowFlags_NoResize)) {
+        ImGui::SetWindowFontScale(1.4f);
+        ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.5f, 1.0f), "%s", T(L(), "thanks_body").c_str());
+        ImGui::SetWindowFontScale(1.0f);
+
+        ImGui::Spacing();
+        ImGui::TextWrapped("%s", T(L(), "thanks_subtext").c_str());
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::Checkbox(T(L(), "dont_show_again").c_str(), &m_thanksDontShow);
+
+        ImGui::Spacing();
+        if (ImGui::Button(T(L(), "ok").c_str(), ImVec2(150, 34))) {
+            m_showThanks = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // Persist the checkbox choice the moment the dialog closes - whether via the OK
+    // button, the window's own close X, or Escape - so "don't show again" always
+    // actually reaches vt_config.json instead of only on the OK-button happy path.
+    if (wasOpen && !m_showThanks) {
+        m_config.thanksShown = m_thanksDontShow;
+        SaveConfig(m_config);
     }
 }
 

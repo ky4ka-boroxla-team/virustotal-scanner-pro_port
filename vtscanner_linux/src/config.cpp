@@ -3,6 +3,8 @@
 #include <sstream>
 #include <ctime>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <limits.h>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -46,6 +48,8 @@ AppConfig LoadConfig() {
             cfg.lang = j.value("lang", cfg.lang);
             cfg.theme = j.value("theme", cfg.theme);
             cfg.soundOnComplete = j.value("sound_on_complete", cfg.soundOnComplete);
+            cfg.closeToTray = j.value("close_to_tray", cfg.closeToTray);
+            cfg.autostart = j.value("autostart", cfg.autostart);
         } catch (...) {}
     }
     std::string today = TodayString();
@@ -68,11 +72,59 @@ bool SaveConfig(const AppConfig& cfg) {
     j["lang"] = cfg.lang;
     j["theme"] = cfg.theme;
     j["sound_on_complete"] = cfg.soundOnComplete;
+    j["close_to_tray"] = cfg.closeToTray;
+    j["autostart"] = cfg.autostart;
     std::string path = GetConfigFilePath();
     std::ofstream f(path, std::ios::trunc);
     if (!f.is_open()) return false;
     f << j.dump(2);
     f.close();
     chmod(path.c_str(), S_IRUSR | S_IWUSR);
+    return true;
+}
+
+static std::string GetAutostartFilePath() {
+    const char* xdgConfig = getenv("XDG_CONFIG_HOME");
+    std::string dir;
+    if (xdgConfig && *xdgConfig) {
+        dir = std::string(xdgConfig) + "/autostart";
+    } else {
+        const char* home = getenv("HOME");
+        if (!home) home = ".";
+        dir = std::string(home) + "/.config/autostart";
+    }
+    mkdir(dir.c_str(), 0755);
+    return dir + "/vtscanner.desktop";
+}
+
+bool SetAutostart(bool enable) {
+    std::string desktopPath = GetAutostartFilePath();
+
+    if (!enable) {
+        // No entry left behind - a removed file is the clean, unambiguous "off" state.
+        if (access(desktopPath.c_str(), F_OK) == 0) {
+            return remove(desktopPath.c_str()) == 0;
+        }
+        return true;
+    }
+
+    char exePath[PATH_MAX] = {};
+    ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
+    if (len <= 0) return false;
+    exePath[len] = '\0';
+
+    std::ofstream f(desktopPath, std::ios::trunc);
+    if (!f.is_open()) return false;
+    f << "[Desktop Entry]\n"
+      << "Type=Application\n"
+      << "Name=VirusTotal Scanner Pro\n"
+      << "Comment=VirusTotal Scanner Pro autostart\n"
+      << "Exec=\"" << exePath << "\"\n"
+      << "Icon=vtscanner\n"
+      << "Terminal=false\n"
+      << "X-GNOME-Autostart-enabled=true\n"
+      << "Hidden=false\n";
+    f.close();
+    chmod(desktopPath.c_str(), S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     return true;
 }

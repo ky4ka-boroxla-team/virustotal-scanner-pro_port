@@ -37,13 +37,17 @@ public:
     void OnFileDropped(const std::string& utf8Path);
     bool WantsTopmost() const { return m_config.topmost; }
     bool WantsExit() const { return m_wantsExit; }
+    bool WantsCloseToTray() const { return m_config.closeToTray; }
+    void RequestExit() { m_wantsExit = true; }
     std::string ThemeName() const { return m_config.theme; }
+    Lang CurrentLang() const { return LangFromString(m_config.lang); }
 
 private:
     void DrawMainWindow();
     void DrawSettingsPopup();
     void DrawApiKeyPopup();
     void DrawAboutPopup();
+    void DrawThanksPopup();
     void DrawFileBrowserPopup();
     void OpenFileDialogAndScan();
     void OpenBuiltinFileBrowser();
@@ -71,6 +75,8 @@ private:
     bool m_showSettings = false;
     bool m_showApiKeyPopup = false;
     bool m_showAbout = false;
+    bool m_showThanks = false;
+    bool m_thanksDontShow = false;
     char m_apiKeyBuf[256] = {};
     void* m_hwnd = nullptr;
     bool m_wantsExit = false;

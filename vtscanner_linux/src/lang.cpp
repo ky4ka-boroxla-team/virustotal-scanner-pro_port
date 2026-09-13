@@ -103,6 +103,15 @@ const std::unordered_map<std::string, std::string> RU = {
         "3. Если нет - загружает и ждет результат\n\n"
         "Требуется бесплатный или платный API ключ VirusTotal.\n"
         "Получить ключ: https://www.virustotal.com/gui/join-us"},
+    {"behavior", "Поведение"},
+    {"close_to_tray", "Закрывать в трей"},
+    {"autostart", "Запускать вместе с системой"},
+    {"tray_show", "Показать окно"},
+    {"tray_exit", "Выход"},
+    {"thanks_title", "Спасибо!"},
+    {"thanks_body", "Спасибо что скачал"},
+    {"thanks_subtext", "Я не знаю где ты это использовать будешь\nно используй ¯\\_(ツ)_/¯"},
+    {"dont_show_again", "Не показывать в следующий раз"},
 };
 
 const std::unordered_map<std::string, std::string> EN = {
@@ -207,6 +216,15 @@ const std::unordered_map<std::string, std::string> EN = {
         "3. If not - uploads and waits for the result\n\n"
         "Requires a free or paid VirusTotal API key.\n"
         "Get a key: https://www.virustotal.com/gui/join-us"},
+    {"behavior", "Behavior"},
+    {"close_to_tray", "Close to tray"},
+    {"autostart", "Start with system"},
+    {"tray_show", "Show window"},
+    {"tray_exit", "Exit"},
+    {"thanks_title", "Thank you!"},
+    {"thanks_body", "Thanks for downloading"},
+    {"thanks_subtext", "I don't know where you'll use this\nbut use it ¯\\_(ツ)_/¯"},
+    {"dont_show_again", "Don't show again"},
 };
 }
 

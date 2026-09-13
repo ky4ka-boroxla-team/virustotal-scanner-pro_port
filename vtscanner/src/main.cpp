@@ -27,8 +27,11 @@ static void CleanupRenderTarget();
 static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static App* g_app = nullptr;
+static UINT g_wmTaskbarCreated = 0; // re-registered in wWinMain; fires when explorer.exe restarts
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
+    g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, hInstance, nullptr, nullptr, nullptr, nullptr,
                         L"VTScannerWndClass", nullptr };
     RegisterClassExW(&wc);
@@ -57,17 +60,39 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     const ImWchar* ranges = io.Fonts->GetGlyphRangesCyrillic();
     wchar_t winDir[MAX_PATH] = {};
     GetWindowsDirectoryW(winDir, MAX_PATH);
+
+    auto WideToUtf8 = [](const std::wstring& w) -> std::string {
+        int size = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::string out(size, '\0');
+        WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, out.data(), size, nullptr, nullptr);
+        if (!out.empty() && out.back() == '\0') out.pop_back();
+        return out;
+    };
+
     std::wstring fontPath = std::wstring(winDir) + L"\\Fonts\\segoeui.ttf";
-    std::string fontPathUtf8;
-    {
-        int size = WideCharToMultiByte(CP_UTF8, 0, fontPath.c_str(), -1, nullptr, 0, nullptr, nullptr);
-        fontPathUtf8.resize(size);
-        WideCharToMultiByte(CP_UTF8, 0, fontPath.c_str(), -1, fontPathUtf8.data(), size, nullptr, nullptr);
-    }
     if (GetFileAttributesW(fontPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
-        io.Fonts->AddFontFromFileTTF(fontPathUtf8.c_str(), 17.0f, &fontCfg, ranges);
+        io.Fonts->AddFontFromFileTTF(WideToUtf8(fontPath).c_str(), 17.0f, &fontCfg, ranges);
     } else {
         io.Fonts->AddFontDefault();
+    }
+
+    // Segoe UI has no Japanese glyphs, so merge in just the one character the "thanks"
+    // dialog's ¯\_(ツ)_/¯ needs (U+30C4) from whichever CJK-capable font is installed.
+    // Best-effort: if none of these are present, the character falls back to a
+    // missing-glyph box - a limitation of the OS's installed fonts, not of this code.
+    static const ImWchar kShrugRange[] = { 0x30C4, 0x30C4, 0 };
+    const wchar_t* cjkCandidates[] = { L"msgothic.ttc", L"YuGothM.ttc", L"meiryo.ttc",
+                                        L"msmincho.ttc", L"simsun.ttc" };
+    for (const wchar_t* name : cjkCandidates) {
+        std::wstring cjkPath = std::wstring(winDir) + L"\\Fonts\\" + name;
+        if (GetFileAttributesW(cjkPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            ImFontConfig mergeCfg;
+            mergeCfg.MergeMode = true;
+            mergeCfg.OversampleH = 2;
+            mergeCfg.OversampleV = 2;
+            io.Fonts->AddFontFromFileTTF(WideToUtf8(cjkPath).c_str(), 17.0f, &mergeCfg, kShrugRange);
+            break;
+        }
     }
 
     ImGui::StyleColorsDark();
@@ -203,6 +228,12 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM,
 static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) return true;
 
+    if (g_wmTaskbarCreated != 0 && msg == g_wmTaskbarCreated) {
+        // Explorer.exe restarted (e.g. crashed) - the tray icon was lost, re-add it.
+        if (g_app) g_app->RecreateTrayIcon();
+        return 0;
+    }
+
     switch (msg) {
     case WM_SIZE:
         if (wParam == SIZE_MINIMIZED) return 0;
@@ -212,6 +243,19 @@ static LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_SYSCOMMAND:
         if ((wParam & 0xfff0) == SC_KEYMENU) return 0; // disable ALT app menu
         break;
+    case WM_CLOSE:
+        // If "close to tray" is enabled, hide the window instead of destroying it.
+        if (g_app && g_app->WantsCloseToTray()) {
+            g_app->MinimizeToTray();
+            return 0;
+        }
+        break;
+    case App::WM_APP_TRAYICON:
+        if (g_app) g_app->OnTrayIconMessage(wParam, lParam);
+        return 0;
+    case WM_COMMAND:
+        if (g_app) g_app->OnTrayCommand(LOWORD(wParam));
+        return 0;
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;

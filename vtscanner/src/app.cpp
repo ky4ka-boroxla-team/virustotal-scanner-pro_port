@@ -53,6 +53,7 @@ App::App() {}
 App::~App() {
     m_shuttingDown = true;
     if (m_worker.joinable()) m_worker.join();
+    RemoveTrayIcon();
 }
 
 void App::Init(HWND hwnd) {
@@ -67,6 +68,114 @@ void App::Init(HWND hwnd) {
 
     if (m_config.apiKey.empty()) {
         m_showApiKeyPopup = true;
+    }
+
+    if (!m_config.thanksShown) {
+        m_showThanks = true;
+    }
+
+    // Keep the registry Run entry in sync with the saved setting on every launch
+    // (covers cases where the exe was moved/renamed or the entry was removed manually).
+    SetAutostart(m_config.autostart);
+
+    AddTrayIcon();
+}
+
+// ---------------------------------------------------------------------------------------------
+// System tray
+// ---------------------------------------------------------------------------------------------
+
+void App::AddTrayIcon() {
+    if (m_trayIconAdded || !m_hwnd) return;
+
+    ZeroMemory(&m_nid, sizeof(m_nid));
+    m_nid.cbSize = sizeof(NOTIFYICONDATAW);
+    m_nid.hWnd = m_hwnd;
+    m_nid.uID = 1;
+    m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    m_nid.uCallbackMessage = WM_APP_TRAYICON;
+
+    m_nid.hIcon = (HICON)LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(1), IMAGE_ICON,
+                                     GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+                                     LR_DEFAULTCOLOR);
+    if (!m_nid.hIcon) m_nid.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+
+    wcsncpy_s(m_nid.szTip, L"VirusTotal Scanner Pro", _TRUNCATE);
+
+    m_trayIconAdded = Shell_NotifyIconW(NIM_ADD, &m_nid) != FALSE;
+    if (m_trayIconAdded) {
+        m_nid.uVersion = NOTIFYICON_VERSION_4;
+        Shell_NotifyIconW(NIM_SETVERSION, &m_nid);
+    }
+}
+
+void App::RemoveTrayIcon() {
+    if (!m_trayIconAdded) return;
+    Shell_NotifyIconW(NIM_DELETE, &m_nid);
+    if (m_nid.hIcon) {
+        DestroyIcon(m_nid.hIcon);
+        m_nid.hIcon = nullptr;
+    }
+    m_trayIconAdded = false;
+}
+
+void App::RecreateTrayIcon() {
+    m_trayIconAdded = false;
+    AddTrayIcon();
+}
+
+void App::MinimizeToTray() {
+    if (!m_hwnd) return;
+    ShowWindow(m_hwnd, SW_HIDE);
+}
+
+void App::RestoreFromTray() {
+    if (!m_hwnd) return;
+    ShowWindow(m_hwnd, SW_SHOW);
+    ShowWindow(m_hwnd, SW_RESTORE);
+    SetForegroundWindow(m_hwnd);
+}
+
+void App::OnTrayIconMessage(WPARAM /*wParam*/, LPARAM lParam) {
+    UINT mouseMsg = LOWORD(lParam);
+    switch (mouseMsg) {
+    case WM_LBUTTONDBLCLK:
+        RestoreFromTray();
+        break;
+    case WM_RBUTTONUP:
+    case WM_CONTEXTMENU:
+        ShowTrayContextMenu();
+        break;
+    default:
+        break;
+    }
+}
+
+void App::ShowTrayContextMenu() {
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return;
+
+    AppendMenuW(menu, MF_STRING, ID_TRAY_SHOW, HttpClient::Utf8ToWide(T(L(), "tray_show")).c_str());
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_TRAY_EXIT, HttpClient::Utf8ToWide(T(L(), "tray_exit")).c_str());
+
+    POINT pt{};
+    GetCursorPos(&pt);
+
+    // Required so the menu closes correctly when the user clicks elsewhere.
+    SetForegroundWindow(m_hwnd);
+    TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, 0, m_hwnd, nullptr);
+    PostMessageW(m_hwnd, WM_NULL, 0, 0);
+
+    DestroyMenu(menu);
+}
+
+void App::OnTrayCommand(UINT commandId) {
+    if (commandId == ID_TRAY_SHOW) {
+        RestoreFromTray();
+    } else if (commandId == ID_TRAY_EXIT) {
+        RemoveTrayIcon();
+        m_wantsExit = true;
     }
 }
 
@@ -112,6 +221,7 @@ void App::DrawUI() {
     if (m_showSettings) DrawSettingsPopup();
     if (m_showApiKeyPopup) DrawApiKeyPopup();
     if (m_showAbout) DrawAboutPopup();
+    if (m_showThanks) DrawThanksPopup();
 }
 
 void App::DrawMainWindow() {
@@ -216,8 +326,15 @@ void App::DrawSettingsPopup() {
 
         ImGui::Spacing();
         ImGui::Separator();
+        ImGui::Text("%s", T(L(), "behavior").c_str());
+        ImGui::Checkbox(T(L(), "close_to_tray").c_str(), &m_config.closeToTray);
+        ImGui::Checkbox(T(L(), "autostart").c_str(), &m_config.autostart);
+
+        ImGui::Spacing();
+        ImGui::Separator();
 
         if (ImGui::Button(T(L(), "save").c_str(), ImVec2(120, 32))) {
+            SetAutostart(m_config.autostart);
             SaveConfig(m_config);
             MutateState([&](ScanState& s) { s.statusText = T(L(), "ready"); });
             m_showSettings = false;
@@ -269,6 +386,45 @@ void App::DrawAboutPopup() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
+    }
+}
+
+void App::DrawThanksPopup() {
+    ImGui::OpenPopup(T(L(), "thanks_title").c_str());
+    ImGui::SetNextWindowSize(ImVec2(440, 220), ImGuiCond_Appearing);
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+                                    viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
+                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    bool wasOpen = m_showThanks;
+    if (ImGui::BeginPopupModal(T(L(), "thanks_title").c_str(), &m_showThanks,
+                                ImGuiWindowFlags_NoResize)) {
+        ImGui::SetWindowFontScale(1.4f);
+        ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.5f, 1.0f), "%s", T(L(), "thanks_body").c_str());
+        ImGui::SetWindowFontScale(1.0f);
+
+        ImGui::Spacing();
+        ImGui::TextWrapped("%s", T(L(), "thanks_subtext").c_str());
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::Checkbox(T(L(), "dont_show_again").c_str(), &m_thanksDontShow);
+
+        ImGui::Spacing();
+        if (ImGui::Button(T(L(), "ok").c_str(), ImVec2(150, 34))) {
+            m_showThanks = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // Persist the checkbox choice the moment the dialog closes - whether via the OK
+    // button, the window's own close X, or Escape - so "don't show again" always
+    // actually reaches vt_config.json instead of only on the OK-button happy path.
+    if (wasOpen && !m_showThanks) {
+        m_config.thanksShown = m_thanksDontShow;
+        SaveConfig(m_config);
     }
 }
 

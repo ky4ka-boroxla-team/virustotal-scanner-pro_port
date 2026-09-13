@@ -5,6 +5,7 @@
 #include <thread>
 #include <functional>
 #include <windows.h>
+#include <shellapi.h>
 #include "config.h"
 #include "lang.h"
 
@@ -27,6 +28,11 @@ struct ScanState {
 
 class App {
 public:
+    // Custom window message the tray icon posts back to the main window (mouse events on the icon).
+    static constexpr UINT WM_APP_TRAYICON = WM_APP + 1;
+    static constexpr UINT ID_TRAY_SHOW = 1001;
+    static constexpr UINT ID_TRAY_EXIT = 1002;
+
     App();
     ~App();
 
@@ -38,11 +44,20 @@ public:
     bool WantsExit() const { return m_wantsExit; }
     std::string ThemeName() const { return m_config.theme; }
 
+    // --- System tray ---
+    bool WantsCloseToTray() const { return m_config.closeToTray; }
+    void MinimizeToTray();
+    void RestoreFromTray();
+    void RecreateTrayIcon();               // re-add icon after explorer.exe restarts (TaskbarCreated)
+    void OnTrayIconMessage(WPARAM wParam, LPARAM lParam);
+    void OnTrayCommand(UINT commandId);
+
 private:
     void DrawMainWindow();
     void DrawSettingsPopup();
     void DrawApiKeyPopup();
     void DrawAboutPopup();
+    void DrawThanksPopup();
 
     void OpenFileDialogAndScan();
     void StartScan(const std::wstring& path, const std::string& fileNameUtf8);
@@ -53,6 +68,10 @@ private:
     void OpenInBrowser();
     void PlayCompleteSound();
     void BumpRequestsUsed();
+
+    void AddTrayIcon();
+    void RemoveTrayIcon();
+    void ShowTrayContextMenu();
 
     ScanState Snapshot();
     void MutateState(const std::function<void(ScanState&)>& fn);
@@ -71,8 +90,13 @@ private:
     bool m_showSettings = false;
     bool m_showApiKeyPopup = false;
     bool m_showAbout = false;
+    bool m_showThanks = false;
+    bool m_thanksDontShow = false;
     char m_apiKeyBuf[256] = {};
 
     HWND m_hwnd = nullptr;
     bool m_wantsExit = false;
+
+    NOTIFYICONDATAW m_nid{};
+    bool m_trayIconAdded = false;
 };

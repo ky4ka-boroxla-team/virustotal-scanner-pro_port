@@ -12,6 +12,7 @@
 #include <cstring>
 #include <climits>
 #include "app.h"
+#include "tray_linux.h"
 #include "version_info.h"
 
 static Display* g_display = nullptr;
@@ -285,6 +286,28 @@ std::string GetFontPath() {
     return "";
 }
 
+// Best-effort lookup for a CJK-capable font, used only to merge in the single glyph
+// (ツ, U+30C4) that the "thanks" dialog's ¯\_(ツ)_/¯ needs. If none of these packages
+// are installed, the character falls back to a missing-glyph box - a limitation of
+// the system's installed fonts, not of this code.
+std::string GetCjkFontPath() {
+    const char* fonts[] = {
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansJP-Regular.otf",
+        "/usr/share/fonts/truetype/noto/NotoSansJP-Regular.ttf",
+        "/usr/share/fonts/truetype/takao-gothic/TakaoGothic.ttf",
+        "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+        "/usr/share/fonts/truetype/unifont/unifont.ttf",
+        nullptr
+    };
+    for (int i = 0; fonts[i]; ++i) {
+        if (access(fonts[i], R_OK) == 0) return fonts[i];
+    }
+    return "";
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v")) {
         VersionInfo::PrintVersion();
@@ -311,6 +334,16 @@ int main(int argc, char** argv) {
     } else {
         io.Fonts->AddFontDefault();
     }
+
+    std::string cjkFontPath = GetCjkFontPath();
+    if (!cjkFontPath.empty()) {
+        static const ImWchar kShrugRange[] = { 0x30C4, 0x30C4, 0 };
+        ImFontConfig mergeCfg;
+        mergeCfg.MergeMode = true;
+        mergeCfg.OversampleH = 2;
+        mergeCfg.OversampleV = 2;
+        io.Fonts->AddFontFromFileTTF(cjkFontPath.c_str(), 17.0f, &mergeCfg, kShrugRange);
+    }
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
     style.WindowRounding = 6.0f;
@@ -322,13 +355,43 @@ int main(int argc, char** argv) {
     app.Init(nullptr);
     bool done = false;
 
+    Tray::Init(g_display, DefaultScreen(g_display), g_window,
+               "VirusTotal Scanner Pro",
+               T(app.CurrentLang(), "tray_show"),
+               T(app.CurrentLang(), "tray_exit"),
+               [&]() {
+                   XMapWindow(g_display, g_window);
+                   XRaiseWindow(g_display, g_window);
+                   Atom netActiveWindow = XInternAtom(g_display, "_NET_ACTIVE_WINDOW", False);
+                   XEvent activateEv = {};
+                   activateEv.type = ClientMessage;
+                   activateEv.xclient.window = g_window;
+                   activateEv.xclient.message_type = netActiveWindow;
+                   activateEv.xclient.format = 32;
+                   activateEv.xclient.data.l[0] = 1;
+                   activateEv.xclient.data.l[1] = CurrentTime;
+                   XSendEvent(g_display, DefaultRootWindow(g_display), False,
+                              SubstructureRedirectMask | SubstructureNotifyMask, &activateEv);
+                   XSetInputFocus(g_display, g_window, RevertToParent, CurrentTime);
+                   XFlush(g_display);
+               },
+               [&]() {
+                   app.RequestExit();
+               });
+
     while (!done) {
         XEvent event;
         while (XPending(g_display)) {
             XNextEvent(g_display, &event);
 
+            if (Tray::HandleEvent(event)) continue;
+
             if (event.type == ClientMessage && (Atom)event.xclient.data.l[0] == g_wmDelete) {
-                done = true;
+                if (app.WantsCloseToTray()) {
+                    XUnmapWindow(g_display, g_window);
+                } else {
+                    done = true;
+                }
             }
 
             if (event.type == ClientMessage) {
@@ -339,7 +402,7 @@ int main(int argc, char** argv) {
                 else if (mt == g_atomXdndDrop) HandleXdndDrop(event.xclient);
             }
 
-            if (event.type == ConfigureNotify) {
+            if (event.type == ConfigureNotify && event.xconfigure.window == g_window) {
                 XConfigureEvent xev = event.xconfigure;
                 io.DisplaySize = ImVec2((float)xev.width, (float)xev.height);
             }
@@ -479,6 +542,7 @@ int main(int argc, char** argv) {
     }
     ImGui_ImplOpenGL3_Shutdown();
     ImGui::DestroyContext();
+    Tray::Shutdown();
     CleanupWindow();
     return 0;
 }

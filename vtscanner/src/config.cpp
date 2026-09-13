@@ -132,6 +132,8 @@ AppConfig LoadConfig() {
             cfg.lang = j.value("lang", cfg.lang);
             cfg.theme = j.value("theme", cfg.theme);
             cfg.soundOnComplete = j.value("sound_on_complete", cfg.soundOnComplete);
+            cfg.closeToTray = j.value("close_to_tray", cfg.closeToTray);
+            cfg.autostart = j.value("autostart", cfg.autostart);
         } catch (...) {
         }
     }
@@ -156,10 +158,37 @@ bool SaveConfig(const AppConfig& cfg) {
     j["lang"] = cfg.lang;
     j["theme"] = cfg.theme;
     j["sound_on_complete"] = cfg.soundOnComplete;
+    j["close_to_tray"] = cfg.closeToTray;
+    j["autostart"] = cfg.autostart;
 
     std::wstring path = GetConfigFilePath();
     std::ofstream f(path, std::ios::binary | std::ios::trunc);
     if (!f.is_open()) return false;
     f << j.dump(2);
     return true;
+}
+
+bool SetAutostart(bool enable) {
+    HKEY hKey = nullptr;
+    LONG openRes = RegOpenKeyExW(HKEY_CURRENT_USER,
+                                  L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                                  0, KEY_SET_VALUE, &hKey);
+    if (openRes != ERROR_SUCCESS) return false;
+
+    bool ok;
+    if (enable) {
+        wchar_t exePath[MAX_PATH] = {};
+        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        std::wstring value = L"\"" + std::wstring(exePath) + L"\"";
+        LONG res = RegSetValueExW(hKey, L"VirusTotalScannerPro", 0, REG_SZ,
+                                   reinterpret_cast<const BYTE*>(value.c_str()),
+                                   static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+        ok = (res == ERROR_SUCCESS);
+    } else {
+        LONG res = RegDeleteValueW(hKey, L"VirusTotalScannerPro");
+        ok = (res == ERROR_SUCCESS || res == ERROR_FILE_NOT_FOUND);
+    }
+
+    RegCloseKey(hKey);
+    return ok;
 }
